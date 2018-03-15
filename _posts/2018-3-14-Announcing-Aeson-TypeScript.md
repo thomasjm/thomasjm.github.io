@@ -15,6 +15,6 @@ This was my first significant Template Haskell project. Here are some notes on t
 
 * Writing Template Haskell that works across all the different GHC versions can be painful. I found the [th-abstraction](https://hackage.haskell.org/package/th-abstraction) library to be an essential resource for reifying types. Nonetheless, I wasn't able to avoid a few `#if` macros to deal with slight changes in the `template-haskell` library over time.
 
-* The way this library is tested is cool: with the exception of a few hand-coded spot checks, the tests just emit TypeScript definitions and values into a `.ts` file and then runs the TypeScript compiler on it to make sure the compiler is happy with it.
+* The way this library is tested is cool: with the exception of a few hand-coded spot checks, the tests just emit TypeScript definitions and values into a `.ts` file and then run the TypeScript compiler on it to make sure the compiler is happy with it.
 
 * The hardest part of making this library match Aeson was all the different combinations of encoding options that Aeson supports. Aeson has 4 different "sum encoding" strategies for how to encode a value constructor, plus several additional boolean flags like `tagSingleConstructors`, `unwrapUnaryRecords`, etc. There's a slight TODO here; see this [issue](https://github.com/codedownio/aeson-typescript/issues/1).
