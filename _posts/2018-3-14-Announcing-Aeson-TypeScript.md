@@ -11,7 +11,7 @@ The library is on Stackage as of [LTS-10.8](https://www.stackage.org/lts-10.8/pa
 
 This was my first significant Template Haskell project. Here are some notes on the implementation:
 
-* The key typeclass is called `TypeScript a` and the key functions within it are `getTypeScriptDeclarations :: Proxy a -> [TSDeclaration]` and `getTypeScriptType :: Proxy a -> String`. It turns out `Data.Proxy` is a great way to write functions that depend only on the *type* of something, rather than on a concrete value. As an extra bonus, `Data.Proxy` is poly-kinded, so you can naturally use higher-kinded types with it. I initially wrote the library using `Data.Tagged` but it wasn't poly-kinded (and was also slightly more verbose).
+* The key typeclass is called `TypeScript a` and the key functions within it are `getTypeScriptDeclarations :: Proxy a -> [TSDeclaration]` and `getTypeScriptType :: Proxy a -> String`. It turns out `Data.Proxy` is a great way to write functions that depend only on the *type* of something, rather than on a concrete value. As an extra bonus, `Data.Proxy` is poly-kinded, so you can naturally use higher-kinded types with it. I initially wrote the library using `Data.Tagged` but ~~it wasn't poly-kinded~~ (EDIT: it is actually poly-kinded, but I couldn't figure it out at the time) and was also slightly more verbose.
 
 * Writing Template Haskell that works across all the different GHC versions can be painful. I found the [th-abstraction](https://hackage.haskell.org/package/th-abstraction) library to be an essential resource for reifying types. Nonetheless, I wasn't able to avoid a few `#if` macros to deal with slight changes in the `template-haskell` library over time.
 
