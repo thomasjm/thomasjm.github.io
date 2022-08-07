@@ -5,7 +5,9 @@ with pkgs;
 mkShell {
   buildInputs = [
     nixpkgs-fmt
-    jekyll
+
+    bundler
+    bundix
   ];
 
   shellHook = ''

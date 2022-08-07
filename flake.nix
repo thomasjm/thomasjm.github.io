@@ -15,6 +15,20 @@
           defaultPackage.x86_64-linux = self.packages.x86_64-linux.hello;
 
           devShells.default = import ./shell.nix { inherit pkgs; };
+
+          devShells.jekyll = with pkgs; let
+            env = bundlerEnv {
+              name = "your-package";
+              inherit ruby;
+              gemfile = ./Gemfile;
+              lockfile = ./Gemfile.lock;
+              gemset = ./gemset.nix;
+            };
+          in
+            stdenv.mkDerivation {
+              name = "jekyll-env";
+              buildInputs = [env bundler ruby];
+            };
         }
     );
 }
