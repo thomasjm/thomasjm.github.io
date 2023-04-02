@@ -6,6 +6,7 @@ mkShell {
   buildInputs = [
     nixpkgs-fmt
 
+    gem
     bundler
     bundix
   ];
