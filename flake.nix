@@ -9,11 +9,22 @@
       ruby = pkgs.ruby_3_1;
 
       env = pkgs.bundlerEnv {
-        name = "your-package";
+        name = "thomasjm-github-io-env";
         inherit ruby;
         gemfile = ./Gemfile;
         lockfile = ./Gemfile.lock;
         gemset = ./gemset.nix;
+        buildInputs = [pkgs.bintools];
+        gemConfig.nokogiri = attrs: {
+          version = attrs.version + "-x86_64-linux";
+          buildInputs = [ pkgs.zlib ];
+        };
+        gemConfig.sass-embedded = attrs: {
+          SASS_EMBEDDED = pkgs.fetchurl {
+            url = "https://github.com/sass/dart-sass-embedded/releases/download/1.60.0/sass_embedded-1.60.0-linux-x64.tar.gz";
+            sha256 = "1x85l6s3bsdawcchs1n4hryy3yl6hidypzwswzqyhjqx0f5ask0k";
+          };
+        };
       };
 
       serveScript = pkgs.writeShellScript "jekyll-serve.sh" ''
@@ -49,11 +60,15 @@
           default = serve;
         };
 
+        packages = {
+          default = serveScript;
+        };
+
         devShells = rec {
           shellNix = import ./shell.nix { inherit pkgs; };
           jekyll = pkgs.mkShell {
             name = "jekyll-env";
-            packages = [env pkgs.bundler ruby];
+            packages = [pkgs.bundler ruby];
           };
           default = jekyll;
         };
