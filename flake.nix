@@ -1,34 +1,39 @@
 {
-  description = "A very basic flake";
-
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = { self, flake-utils, nixpkgs }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
-      let
-        pkgs = import nixpkgs { inherit system; };
-      in
-        {
+    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
+      pkgs = import nixpkgs { inherit system; };
 
-          packages.x86_64-linux.hello = nixpkgs.legacyPackages.x86_64-linux.hello;
+      env = pkgs.bundlerEnv {
+        name = "your-package";
+        inherit (pkgs) ruby;
+        gemfile = ./Gemfile;
+        lockfile = ./Gemfile.lock;
+        gemset = ./gemset.nix;
+      };
 
-          defaultPackage.x86_64-linux = self.packages.x86_64-linux.hello;
+      serveScript = pkgs.writeShellScript "jekyll-serve.sh" ''
+        ${env}/bin/jekyll serve
+      '';
 
-          devShells.default = import ./shell.nix { inherit pkgs; };
+    in
+      rec {
+        apps = {
+          default = {
+            type = "app";
+            program = "${serveScript}";
+          };
+        };
 
-          devShells.jekyll = with pkgs; let
-            env = bundlerEnv {
-              name = "your-package";
-              inherit ruby;
-              gemfile = ./Gemfile;
-              lockfile = ./Gemfile.lock;
-              gemset = ./gemset.nix;
-            };
-          in
-            stdenv.mkDerivation {
-              name = "jekyll-env";
-              buildInputs = [env bundler ruby];
-            };
-        }
+        devShells = rec {
+          shellNix = import ./shell.nix { inherit pkgs; };
+          jekyll = pkgs.mkShell {
+            name = "jekyll-env";
+            packages = [env pkgs.bundler pkgs.ruby];
+          };
+          default = jekyll;
+        };
+      }
     );
 }
