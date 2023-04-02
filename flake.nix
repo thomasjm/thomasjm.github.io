@@ -20,13 +20,33 @@
         ${env}/bin/jekyll serve
       '';
 
+      buildScript = pkgs.writeShellScript "jekyll-build.sh" ''
+        ${env}/bin/jekyll build
+      '';
+
+      bundixScript = pkgs.writeShellScript "jekyll-bundix.sh" ''
+        ${pkgs.bundix}/bin/bundix -l
+      '';
+
     in
       rec {
-        apps = {
-          default = {
+        apps = rec {
+          serve = {
             type = "app";
             program = "${serveScript}";
           };
+
+          build = {
+            type = "app";
+            program = "${buildScript}";
+          };
+
+          bundix = {
+            type = "app";
+            program = "${bundixScript}";
+          };
+
+          default = serve;
         };
 
         devShells = rec {

@@ -82,4 +82,5 @@ exclude:
   - gemset.nix
   - shell.nix
 
-theme: jekyll-theme-minimal
+# theme: jekyll-theme-minimal
+theme: jekyll-theme-chirpy
