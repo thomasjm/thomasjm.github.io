@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Haskell's slow close_fds problem
+tags: [haskell]
 ---
 
 On most Linux systems, the following simple Haskell program will print "hiii" immediately. But with one simple configuration change, it can bring your system to its knees for several minutes.

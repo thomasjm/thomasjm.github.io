@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Introducing Sandwich
+tags: [haskell, sandwich]
 ---
 
 This post is also hosted on the [Sandwich site](https://codedownio.github.io/sandwich/).
