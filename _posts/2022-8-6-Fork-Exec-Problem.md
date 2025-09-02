@@ -55,9 +55,9 @@ Digging into this problem takes you into a real rabbit hole of POSIX history and
 
 ### A little bit of history
 
-In the beginning[^1], Unix systems had a per-process file descriptor limit of 20. If you were writing a library that forked off processes, and you were concerned about file descriptor leaks, it was no problem to guarantee they were all closed by writing a loop up to 19 and `close`ing them all.
+In the beginning, Unix systems had a per-process file descriptor limit of 20. If you were writing a library that forked off processes, and you were concerned about file descriptor leaks, it was no problem to guarantee they were all closed by writing a loop up to 19 and `close`ing them all.
 
-Over time, that limit was bumped higher and higher. A common default ended up being 1024, which can be found in some C libraries[^2]. In modern Linux there's no system-wide limit baked into the kernel. Instead, the limit is controlled on a per-process basis as part of the `RLIMIT` ("resource limit") system. This is the same system that controls a process's maximum stack size, nice value, etc.
+Over time, that limit was bumped higher and higher. A common default ended up being 1024, which can be found in some C libraries[^1]. In modern Linux there's no system-wide limit baked into the kernel. Instead, the limit is controlled on a per-process basis as part of the `RLIMIT` ("resource limit") system. This is the same system that controls a process's maximum stack size, nice value, etc.
 
 How a process gets its `RLIMIT` values is a bit complicated. Processes have both "soft" (i.e. effective) and "hard" (i.e. maximum) limits, and in general these are inherited from their parent processes. Processes can also change their own limits with the `setrlimit` syscall. They can lower their limits, or raise them up to the hard limit. Privileged processes may raise their hard limits. Also, external systems can moderate limits. Linux's PAM ("pluggable authentication modules") are often used to apply limits to user sessions. Systemd can manage the limits of the processes it manages. Container systems like Docker can set limits too, and can layer the above things on top of each other. When your process doesn't have the limit you expected, it can be tricky to find out why!
 
@@ -67,7 +67,7 @@ Because of the above history, the POSIX standard doesn't offer a system call for
 
 * First of all, you can try looping over all file descriptors just like the old days. But even correctly finding the maximum is a bit fraught. A common approach and the one used currently in `System.Process` is to use the `sysconf` mechanism by calling `sysconf(_SC_OPEN_MAX)`
 **Pros**: Simple.
-**Cons**: Not perfectly correct[^3], and if the maximum really is 1 billion you're going to have a bad time.
+**Cons**: Not perfectly correct[^2], and if the maximum really is 1 billion you're going to have a bad time.
 
 * A process can discover its own open file descriptors by listing the directory `/proc/${pid}/fd` (Linux) or `/dev/fd` (macOS), where it can find a file named after each file descriptor.
 **Pros**: This approach is actually `O(number of open files)`.
@@ -84,6 +84,10 @@ Because of the above history, the POSIX standard doesn't offer a system call for
 
 
 ### How does Python do it?
+
+TODO
+
+### How does Golang do it?
 
 
 ### What about static linking?
@@ -103,6 +107,5 @@ https://bugs.python.org/issue1663329
 
 
 
-[^1]: Or so I've read; I wasn't alive for this.
-[^2]: https://stackoverflow.com/questions/6798365/why-do-operating-systems-limit-file-descriptors
-[^3]: https://stackoverflow.com/questions/899038/getting-the-highest-allocated-file-descriptor/918469#918469
+[^1]: <https://stackoverflow.com/questions/6798365/why-do-operating-systems-limit-file-descriptors>
+[^2]: <https://stackoverflow.com/questions/899038/getting-the-highest-allocated-file-descriptor/918469#918469>
