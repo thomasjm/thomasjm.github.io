@@ -40,7 +40,7 @@
       '';
 
     in
-      rec {
+      {
         apps = rec {
           serve = {
             type = "app";
