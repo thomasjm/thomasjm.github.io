@@ -61,51 +61,54 @@ Over time, that limit was bumped higher and higher. A common default ended up be
 
 How a process gets its `RLIMIT` values is a bit complicated. Processes have both "soft" (i.e. effective) and "hard" (i.e. maximum) limits, and in general these are inherited from their parent processes. Processes can also change their own limits with the `setrlimit` syscall. They can lower their limits, or raise them up to the hard limit. Privileged processes may raise their hard limits. Also, external systems can moderate limits. Linux's PAM ("pluggable authentication modules") are often used to apply limits to user sessions. Systemd can manage the limits of the processes it manages. Container systems like Docker can set limits too, and can layer the above things on top of each other. When your process doesn't have the limit you expected, it can be tricky to find out why!
 
-### The workarounds
+The problem of long delays due to file descriptor closing loops has been noticed before. In Python on FreeBSD, with a file descriptor limit of 655000, the loop took [3 seconds](https://bugs.python.org/issue11284#msg129043). A web proxy server called Squid would become [unresponsive for up to a minute](https://bugzilla.redhat.com/show_bug.cgi?id=837033) on a Xen machine as multiple child processes did 32 thousand close syscalls each. And another [Python bug report](https://bugs.python.org/issue1663329) found it took 14 seconds for a `subprocess.Popen` call with a limit of `260000` descriptors. These kinds of issues influenced the workarounds that most languages eventually adopted (see below).
+
+### Some workarounds and fixes
 
 Because of the above history, the POSIX standard doesn't offer a system call for a process to say "I'm doing an `exec` so please close all the file descriptors I'm currently holding, except perhaps for a few like `stdout` or `stderr`." There are a number of workarounds:
 
 * First of all, you can try looping over all file descriptors just like the old days. But even correctly finding the maximum is a bit fraught. A common approach and the one used currently in `System.Process` is to use the `sysconf` mechanism by calling `sysconf(_SC_OPEN_MAX)`
-**Pros**: Simple.
-**Cons**: Not perfectly correct[^2], and if the maximum really is 1 billion you're going to have a bad time.
+  * **Pros**: Simple.
+  * **Cons**: Not perfectly correct[^2], and if the maximum really is 1 billion you're going to have a bad time.
 
 * A process can discover its own open file descriptors by listing the directory `/proc/${pid}/fd` (Linux) or `/dev/fd` (macOS), where it can find a file named after each file descriptor.
-**Pros**: This approach is actually `O(number of open files)`.
-**Cons**: Parsing integers from file names feels weird. And if you're using containerization tricks like file namespaces, then `/proc` files may not be available.
+  * **Pros**: This approach is actually `O(number of open files)`.
+  * **Cons**: Parsing integers from file names feels weird. And if you're using containerization tricks like file namespaces, then `/proc` files may not be available.
 
 * MacOS offers `proc_pidinfo`, which lets a process enumerate its file descriptors.
-**Pros**: Same as previous.
-**Cons**: Platform-specific.
+  * **Pros**: Same as previous.
+  * **Cons**: Platform-specific.
 
-* Linux offers the `O_CLOEXEC` flag, which you can set when opening a file to ensure it will be closed on `exec`.
-**Pros**: Simple, doesn't require any work at `exec` time.
-**Cons**: Platform-specific. Can't guarantee this flag is always used, so can't be relied upon in a general forking library like `System.Process`.
+* The `close_range` syscall, which allows the caller to close a range of file descriptors efficiently (like from FD 3 to the max number).
+  * **Pros**: Solves the performance problem if you can close all your file descriptors in a few chunks.
+  * **Cons**: Linux-only (and pretty recent Linux at that: kernel 5.9, released in October 2020).
 
+* Marking file descriptors as non-inheritable by default. For example, Linux offers the `O_CLOEXEC` flag, which you can set when opening a file to ensure it will be closed on `exec`. This flag was added to macOS in 10.7 (Lion) in 2011. Windows also has an equivalent.
+  * **Pros**: Doesn't require any work at `exec` time.
+  * **Cons**: Getting all the platform-specific details right. And also, race conditions. Some older platforms don't allow you to atomically create a file descriptor and mark it as non-inheritable. Some platforms can do this for a file descriptor but not a socket! This [table](https://peps.python.org/pep-0446/#status-of-python-3-3) explains the available support.
 
+### How do other languages do it?
 
-### How does Python do it?
+Most languages that aim to do portable subprocess creation have had to confront this issue at some point. A lot of languages did so surprisingly late!
 
-TODO
+All of the following languages have converged on the solution of making all new file descriptors non-inheritable by default (i.e. using `O_CLOEXEC`-type mechanisms)[^3].
 
-### How does Golang do it?
+* Perl 1.0 (1987)
+* Go 1.0 (2009)
+* Python 3.4 (2013)
+* Ruby 2.0 (2013)
 
+Somehow Perl was way ahead of the curve here.
 
-### What about static linking?
+Go has an interesting locking mechanism called `ForkLock` for dealing with non-atomic file descriptor or socket creation, which you can read about [here](https://github.com/golang/go/blob/7bba745820b771307593b7278ce17464eeda2f3d/src/syscall/exec_unix.go#L19).
 
+Python's PEP 446, which implemented non-inheritable file descriptors by default in version 3.4, has a rather inspiring statement at the beginning:
 
-### Links
+> We are aware of the code breakage this is likely to cause, and doing it anyway for the good of mankind.
 
-https://github.com/python/cpython/blob/main/Modules/_posixsubprocess.c
-
-https://peps.python.org/pep-0446/#related-work
-
-https://bugs.python.org/issue1663329
-
-
-
-### How stable are syscalls really?
-
+Maybe Haskell's `System.Process` should follow their lead!
 
 
 [^1]: <https://stackoverflow.com/questions/6798365/why-do-operating-systems-limit-file-descriptors>
 [^2]: <https://stackoverflow.com/questions/899038/getting-the-highest-allocated-file-descriptor/918469#918469>
+[^3]: <https://peps.python.org/pep-0446/#related-work>
