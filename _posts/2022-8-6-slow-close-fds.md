@@ -4,7 +4,7 @@ title: Haskell's slow close_fds problem
 tags: [haskell]
 ---
 
-On most Linux systems, the following simple Haskell program will print "hiii" immediately. But with one simple configuration change, it can bring your system to its knees for several minutes.
+On most Linux systems, the following simple Haskell program will print "hello" immediately. But with one simple configuration change, it can bring your system to its knees for several minutes.
 
 ```haskell
 module Main where
@@ -13,7 +13,7 @@ import System.Process
 
 main :: IO ()
 main = do
-  (_, _, _, p) <- createProcess (shell "echo hiii")
+  (_, _, _, p) <- createProcess (shell "echo hello")
   _ <- waitForProcess p
   return ()
 ```
@@ -61,7 +61,7 @@ Over time, that limit was bumped higher and higher. A common default ended up be
 
 How a process gets its `RLIMIT` values is a bit complicated. Processes have both "soft" (i.e. effective) and "hard" (i.e. maximum) limits, and in general these are inherited from their parent processes. Processes can also change their own limits with the `setrlimit` syscall. They can lower their limits, or raise them up to the hard limit. Privileged processes may raise their hard limits. Also, external systems can moderate limits. Linux's PAM ("pluggable authentication modules") are often used to apply limits to user sessions. Systemd can manage the limits of the processes it manages. Container systems like Docker can set limits too, and can layer the above things on top of each other. When your process doesn't have the limit you expected, it can be tricky to find out why!
 
-The problem of long delays due to file descriptor closing loops has been noticed before. In Python on FreeBSD, with a file descriptor limit of 655000, the loop took [3 seconds](https://bugs.python.org/issue11284#msg129043). A web proxy server called Squid would become [unresponsive for up to a minute](https://bugzilla.redhat.com/show_bug.cgi?id=837033) on a Xen machine as multiple child processes did 32 thousand close syscalls each. And another [Python bug report](https://bugs.python.org/issue1663329) found it took 14 seconds for a `subprocess.Popen` call with a limit of `260000` descriptors. These kinds of issues influenced the workarounds that most languages eventually adopted (see below).
+The problem of long delays due to file descriptor closing loops has been noticed before in some other ecosystems. In one bug report about Python on FreeBSD, with a file descriptor limit of 655000, the loop took [3 seconds](https://bugs.python.org/issue11284#msg129043). A web proxy server called Squid would become [unresponsive for up to a minute](https://bugzilla.redhat.com/show_bug.cgi?id=837033) on a Xen machine as multiple child processes did 32 thousand close syscalls each. And another [Python bug report](https://bugs.python.org/issue1663329) found it took 14 seconds for a `subprocess.Popen` call with a limit of `260000` descriptors. These kinds of issues influenced the workarounds that most languages eventually adopted (see below).
 
 ### Some workarounds and fixes
 
@@ -73,7 +73,7 @@ Because of the above history, the POSIX standard doesn't offer a system call for
 
 * A process can discover its own open file descriptors by listing the directory `/proc/${pid}/fd` (Linux) or `/dev/fd` (macOS), where it can find a file named after each file descriptor.
   * **Pros**: This approach is actually `O(number of open files)`.
-  * **Cons**: Parsing integers from file names feels weird. And if you're using containerization tricks like file namespaces, then `/proc` files may not be available.
+  * **Cons**: Parsing integers from file names feels weird. And if you're using containerization tricks like file namespaces, then `/proc` files may not be available. And the process subsystem would need to be careful about race conditions.
 
 * MacOS offers `proc_pidinfo`, which lets a process enumerate its file descriptors.
   * **Pros**: Same as previous.
@@ -85,7 +85,7 @@ Because of the above history, the POSIX standard doesn't offer a system call for
 
 * Marking file descriptors as non-inheritable by default. For example, Linux offers the `O_CLOEXEC` flag, which you can set when opening a file to ensure it will be closed on `exec`. This flag was added to macOS in 10.7 (Lion) in 2011. Windows also has an equivalent.
   * **Pros**: Doesn't require any work at `exec` time.
-  * **Cons**: Getting all the platform-specific details right. And also, race conditions. Some older platforms don't allow you to atomically create a file descriptor and mark it as non-inheritable. Some platforms can do this for a file descriptor but not a socket! This [table](https://peps.python.org/pep-0446/#status-of-python-3-3) explains the available support.
+  * **Cons**: Potential race conditions. Some older platforms don't allow you to atomically create a file descriptor while marking it as non-inheritable. Some platforms can do this for a file descriptor but not a socket! This [table](https://peps.python.org/pep-0446/#atomic-creation-of-non-inheritable-file-descriptors) explains the available support.
 
 ### How do other languages do it?
 
@@ -100,14 +100,21 @@ All of the following languages have converged on the solution of making all new 
 
 Somehow Perl was way ahead of the curve here.
 
-Go has an interesting locking mechanism called `ForkLock` for dealing with non-atomic file descriptor or socket creation, which you can read about [here](https://github.com/golang/go/blob/7bba745820b771307593b7278ce17464eeda2f3d/src/syscall/exec_unix.go#L19).
+For platforms where it's not possible to atomically create a non-inheritable file descriptor or socket, the process library has to be careful to avoid race conditions. Go has an interesting locking mechanism called `ForkLock` for dealing with non-atomic file descriptor or socket creation, which you can read about [here](https://github.com/golang/go/blob/7bba745820b771307593b7278ce17464eeda2f3d/src/syscall/exec_unix.go#L19).
 
 Python's PEP 446, which implemented non-inheritable file descriptors by default in version 3.4, has a rather inspiring statement at the beginning:
 
 > We are aware of the code breakage this is likely to cause, and doing it anyway for the good of mankind.
 
-Maybe Haskell's `System.Process` should follow their lead!
+### Conclusion
 
+Maybe Haskell's `System.Process` should follow the lead of these other projects and make file descriptors non-inheritable by default, which dodges the problem discussed in this post.
+
+It does involve some tricky work around locking to support older systems, but I'd note that atomic non-inheritable file descriptor creation has been available across the board for a while: Linux (since 2007), macOS (since 2012), and Windows (since 2001).
+
+If the community doesn't want to make such a breaking change, it would be nice to use more efficient mechanisms on the platforms where it's available. FWIW, I had taken a stab at that in a [System.Process PR](https://github.com/haskell/process/pull/255) but it's not complete yet.
+
+### Footnotes
 
 [^1]: <https://stackoverflow.com/questions/6798365/why-do-operating-systems-limit-file-descriptors>
 [^2]: <https://stackoverflow.com/questions/899038/getting-the-highest-allocated-file-descriptor/918469#918469>
